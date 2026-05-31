@@ -5,6 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>TIDES — a bioluminescent swarm</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2302060e'/%3E%3Ccircle cx='16' cy='16' r='4.5' fill='%2357f5e8'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%2357f5e8' stroke-opacity='0.45'/%3E%3C/svg%3E" />
+
+<meta name="description" content="An interactive bioluminescent deep-sea swarm in a single HTML file — boids flocking, colour factions, hunting predators, paintable currents, generative audio. Zero dependencies." />
+<meta name="theme-color" content="#02060e" />
+<meta name="author" content="Mark Beech" />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content="TIDES — a bioluminescent swarm" />
+<meta property="og:description" content="An interactive deep-sea ecosystem you stir with your cursor. Glowing creatures school in tribes, flee predators that hunt in the dark, and ride currents you paint with your hand." />
+<meta property="og:url" content="https://jaybizzle.github.io/tides/" />
+<meta property="og:image" content="https://jaybizzle.github.io/tides/preview.jpg" />
+<meta property="og:image:alt" content="A dark sea scattered with glowing schools of bioluminescent creatures and a shadowy predator." />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="TIDES — a bioluminescent swarm" />
+<meta name="twitter:description" content="An interactive deep-sea ecosystem you stir with your cursor. Tap for blooms, drag to paint currents, watch predators hunt in the dark." />
+<meta name="twitter:image" content="https://jaybizzle.github.io/tides/preview.jpg" />
+
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=Spline+Sans+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
@@ -166,16 +183,37 @@
     transform: translate(-50%, -50%);
     text-align: center;
     pointer-events: none;
-    font-size: 12px;
-    letter-spacing: 0.3em;
+    opacity: 0;
+    animation: hintin 2.6s ease 1.2s forwards;
+    transition: opacity 1.1s ease, transform 1.1s ease;
+  }
+  .hint-big {
+    font-family: "Fraunces", serif;
+    font-style: italic;
+    font-weight: 300;
+    font-size: clamp(20px, 3vw, 34px);
+    color: var(--paper);
+    letter-spacing: 0.01em;
+    text-shadow: 0 0 30px rgba(87, 245, 232, 0.3);
+    animation: breathe 4.5s ease-in-out infinite;
+  }
+  .hint-small {
+    margin-top: 14px;
+    font-size: 10.5px;
+    letter-spacing: 0.34em;
     text-transform: uppercase;
     color: var(--faint);
-    opacity: 0;
-    animation: pulse 4s ease 1.4s 2 forwards;
   }
-  @keyframes pulse {
-    0%, 100% { opacity: 0; }
-    50% { opacity: 0.85; }
+  @keyframes hintin { to { opacity: 1; } }
+  @keyframes breathe {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+  }
+  /* once the user takes the helm, the prompt dissolves for good */
+  body.touched .hint {
+    opacity: 0 !important;
+    transform: translate(-50%, -50%) scale(1.06);
+    animation: none;
   }
 
   /* ---- Photo mode: hide all chrome ---- */
@@ -220,10 +258,14 @@
     <div><span class="v" id="rDepth">—</span> fathoms</div>
     <div><span class="v" id="rHour">midnight</span></div>
     <div><span class="v" id="rEaten">0</span> taken by the dark</div>
+    <div><span class="v" id="rScattered">0</span> hunters scattered</div>
     <div><span class="v" id="rState">drifting</span></div>
   </div>
 
-  <div class="hint">— stir the deep —</div>
+  <div class="hint" id="hint">
+    <div class="hint-big">stir the deep</div>
+    <div class="hint-small">move · tap · drag — or simply watch</div>
+  </div>
 
   <div class="lantern" id="lantern"></div>
   <div class="flash" id="flash"></div>
@@ -239,6 +281,7 @@
   const rDepth = document.getElementById("rDepth");
   const rHour = document.getElementById("rHour");
   const rEaten = document.getElementById("rEaten");
+  const rScattered = document.getElementById("rScattered");
   const rState = document.getElementById("rState");
   const flashEl = document.getElementById("flash");
 
@@ -318,6 +361,25 @@
       o.connect(lp); lp.connect(g); g.connect(this.master);
       o.start(now); o.stop(now + 0.36);
     },
+    boom() {
+      if (!this.ctx || !this.on) return;
+      const c = this.ctx, now = c.currentTime;
+      const o = c.createOscillator();
+      o.type = "sine";
+      o.frequency.setValueAtTime(72, now);
+      o.frequency.exponentialRampToValueAtTime(26, now + 0.8);
+      const o2 = c.createOscillator();
+      o2.type = "sine"; o2.frequency.value = 40;
+      const lp = c.createBiquadFilter();
+      lp.type = "lowpass"; lp.frequency.value = 190;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.34, now + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 1.7);
+      o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(this.master);
+      o.start(now); o2.start(now);
+      o.stop(now + 1.8); o2.stop(now + 1.8);
+    },
     toggle() {
       this.init();
       this.on = !this.on;
@@ -351,8 +413,30 @@
     lantern.style.left = x + "px";
     lantern.style.top = y + "px";
   }
+  // ---------- Attract: the sea stirs itself until you take the helm ----------
+  let attract = true, attractT = 0;
+  function endAttract() {
+    if (!attract) return;
+    attract = false;
+    document.body.classList.add("touched");
+  }
+  function driveAttract() {
+    attractT++;
+    // a slow ghost hand wandering a lissajous path
+    const x = W * 0.5 + Math.cos(attractT * 0.011) * W * 0.33;
+    const y = H * 0.5 + Math.sin(attractT * 0.016) * H * 0.30;
+    pointer.px = pointer.x; pointer.py = pointer.y;
+    pointer.x = x; pointer.y = y; pointer.active = true;
+    lantern.style.left = x + "px"; lantern.style.top = y + "px";
+    // breathe a bloom into the dark now and then
+    if (attractT % 175 === 40) {
+      bloom(W * (0.25 + Math.random() * 0.5), H * (0.25 + Math.random() * 0.5));
+    }
+  }
+
   const drag = { down: false, dist: 0, downX: 0, downY: 0 };
   window.addEventListener("pointermove", (e) => {
+    endAttract();
     if (drag.down) {
       const dx = e.clientX - pointer.x, dy = e.clientY - pointer.y;
       drag.dist += Math.hypot(dx, dy);
@@ -361,6 +445,7 @@
     moveTo(e.clientX, e.clientY);
   });
   window.addEventListener("pointerdown", (e) => {
+    endAttract();
     Audio.init();
     if (Audio.ctx && Audio.ctx.state === "suspended") Audio.ctx.resume();
     moveTo(e.clientX, e.clientY);
@@ -525,6 +610,23 @@
     b.flash = 1.6;
   }
 
+  // ---------- The leviathan: an apex shadow that hunts the hunters ----------
+  let scattered = 0;
+  const apex = {
+    x: Math.random() * W, y: Math.random() * H,
+    vx: 0, vy: 0, phase: Math.random() * Math.PI * 2,
+    r: 52, fed: 0,
+  };
+  // a hunter driven off is flung to a far edge and shrunk back to a pup
+  function scatterPredator(p) {
+    const a = Math.random() * Math.PI * 2;
+    p.x = Math.max(-20, Math.min(W + 20, W / 2 + Math.cos(a) * W * 0.6));
+    p.y = Math.max(-20, Math.min(H + 20, H / 2 + Math.sin(a) * H * 0.6));
+    p.vx = Math.cos(a) * 2.4; p.vy = Math.sin(a) * 2.4;
+    p.r = 16 + Math.random() * 6;
+    p.fed = 0;
+  }
+
   // ---------- Simulation ----------
   function limit(vx, vy, max) {
     const m2 = vx * vx + vy * vy;
@@ -536,6 +638,7 @@
   }
 
   function step() {
+    if (attract) driveAttract();
     // pointer speed
     const pdx = pointer.x - pointer.px;
     const pdy = pointer.y - pointer.py;
@@ -634,6 +737,18 @@
         }
       }
 
+      // dread the leviathan — a wider, colder fear
+      {
+        const dx = b.x - apex.x, dy = b.y - apex.y, d2 = dx * dx + dy * dy;
+        const R = 155;
+        if (d2 < R * R && d2 > 0.01) {
+          const d = Math.sqrt(d2);
+          const force = (1 - d / R);
+          b.ax += (dx / d) * force * 0.6;
+          b.ay += (dy / d) * force * 0.6;
+        }
+      }
+
       // bloom attraction (curiosity toward the light)
       for (const bl of blooms) {
         const dx = bl.x - b.x, dy = bl.y - b.y;
@@ -725,7 +840,20 @@
         p.vy += (dy / dl) * 0.012 + Math.sin(p.phase * 1.2) * 0.02;
       }
 
-      const pmax = (lunging ? 3.1 : 1.5) * (calm ? 0.6 : 1);
+      // dread the leviathan — bolt from it, faster than usual
+      let dread = false;
+      {
+        const dx = p.x - apex.x, dy = p.y - apex.y, d2 = dx * dx + dy * dy;
+        const R = 150;
+        if (d2 < R * R && d2 > 1) {
+          dread = true;
+          const d = Math.sqrt(d2);
+          const f = (1 - d / R) * 0.7;
+          p.vx += (dx / d) * f; p.vy += (dy / d) * f;
+        }
+      }
+
+      const pmax = (dread ? 2.1 : lunging ? 3.1 : 1.5) * (calm ? 0.6 : 1);
       const ps = Math.hypot(p.vx, p.vy);
       if (ps > pmax) { p.vx = p.vx / ps * pmax; p.vy = p.vy / ps * pmax; }
       p.x += p.vx; p.y += p.vy;
@@ -737,6 +865,44 @@
 
       p.fed *= 0.9;
     }
+
+    // ---- the leviathan stalks the nearest hunter ----
+    apex.phase += 0.015;
+    let tp = null, td2 = 1e9;
+    for (const p of predators) {
+      const dx = p.x - apex.x, dy = p.y - apex.y, d2 = dx * dx + dy * dy;
+      if (d2 < td2) { td2 = d2; tp = p; }
+    }
+    const A_STRIKE = 205;
+    const aLunge = tp && td2 < A_STRIKE * A_STRIKE;
+    if (aLunge) {
+      const d = Math.sqrt(td2) || 1;
+      apex.vx += ((tp.x - apex.x) / d) * 0.07;
+      apex.vy += ((tp.y - apex.y) / d) * 0.07;
+      // seize: drive the hunter off into the far dark
+      if (d < apex.r * 0.9 + tp.r) {
+        scatterPredator(tp);
+        apex.fed = 1; scattered++;
+        apex.r = Math.min(70, apex.r + 0.6);
+        Audio.boom();
+      }
+    } else if (tp) {
+      // stalk slowly toward the nearest hunter, with a wandering bias
+      const d = Math.sqrt(td2) || 1;
+      apex.vx += ((tp.x - apex.x) / d) * 0.03 + Math.cos(apex.phase) * 0.01;
+      apex.vy += ((tp.y - apex.y) / d) * 0.03 + Math.sin(apex.phase * 1.1) * 0.01;
+    } else {
+      apex.vx += Math.cos(apex.phase) * 0.014;
+      apex.vy += Math.sin(apex.phase * 1.1) * 0.014;
+    }
+    const amax = (aLunge ? 3.0 : 1.6) * (calm ? 0.6 : 1);
+    const aps = Math.hypot(apex.vx, apex.vy);
+    if (aps > amax) { apex.vx = apex.vx / aps * amax; apex.vy = apex.vy / aps * amax; }
+    apex.x += apex.vx; apex.y += apex.vy;
+    const apad = 60;
+    if (apex.x < apad) apex.vx += 0.04; else if (apex.x > W - apad) apex.vx -= 0.04;
+    if (apex.y < apad) apex.vy += 0.04; else if (apex.y > H - apad) apex.vy -= 0.04;
+    apex.fed *= 0.94;
 
     // advance blooms
     for (let i = blooms.length - 1; i >= 0; i--) {
@@ -802,6 +968,41 @@
   const HOURS = ["midnight", "the small hours", "first light", "dawn", "high water", "noon current", "afternoon", "dusk", "nightfall"];
   function hourName() {
     return HOURS[Math.min(HOURS.length - 1, (phaseOfDay * HOURS.length) | 0)];
+  }
+
+  function drawApex() {
+    const p = apex;
+    const wob = 1 + Math.sin(p.phase * 1.5) * 0.05;
+    const R = p.r * 5 * wob;
+    // a vast void that eclipses the water and everything in it
+    ctx.globalCompositeOperation = "source-over";
+    const vg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, R);
+    vg.addColorStop(0, "rgba(1, 2, 6, 0.95)");
+    vg.addColorStop(0.45, "rgba(1, 3, 8, 0.62)");
+    vg.addColorStop(1, "rgba(1, 3, 8, 0)");
+    ctx.fillStyle = vg;
+    ctx.beginPath(); ctx.arc(p.x, p.y, R, 0, Math.PI * 2); ctx.fill();
+
+    // cold bioluminescent underbelly, slowly pulsing; whiter the moment it feeds
+    ctx.globalCompositeOperation = "lighter";
+    const pulse = 0.5 + 0.5 * Math.sin(p.phase * 2);
+    const ga = 0.11 + pulse * 0.10 + (p.fed || 0) * 0.5;
+    const rim = ctx.createRadialGradient(p.x, p.y, p.r * 0.5, p.x, p.y, p.r * 2.3);
+    rim.addColorStop(0, "rgba(120, 200, 230, 0)");
+    rim.addColorStop(0.7, `rgba(${150 + (p.fed || 0) * 90 | 0}, 212, 236, ${ga})`);
+    rim.addColorStop(1, "rgba(120, 200, 230, 0)");
+    ctx.fillStyle = rim;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 2.3, 0, Math.PI * 2); ctx.fill();
+
+    // a pale lure light leading its motion, like an anglerfish in the abyss
+    const ang = Math.atan2(p.vy, p.vx);
+    const lx = p.x + Math.cos(ang) * p.r * 1.15;
+    const ly = p.y + Math.sin(ang) * p.r * 1.15;
+    const lure = ctx.createRadialGradient(lx, ly, 0, lx, ly, 15);
+    lure.addColorStop(0, "rgba(185, 240, 255, 0.9)");
+    lure.addColorStop(1, "rgba(185, 240, 255, 0)");
+    ctx.fillStyle = lure;
+    ctx.beginPath(); ctx.arc(lx, ly, 15, 0, Math.PI * 2); ctx.fill();
   }
 
   function drawPredators() {
@@ -896,6 +1097,7 @@
     }
 
     drawPredators();
+    drawApex();
 
     ctx.globalCompositeOperation = "source-over";
   }
@@ -910,6 +1112,7 @@
       rDepth.textContent = depth.toLocaleString();
       rHour.textContent = hourName();
       rEaten.textContent = eaten;
+      rScattered.textContent = scattered;
       rState.textContent = calm ? "becalmed" : (pointer.speed > 6 ? "scattering" : "drifting");
     }
   }
