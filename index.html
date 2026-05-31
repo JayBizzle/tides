@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>TIDES — a bioluminescent swarm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=Spline+Sans+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --ink:    #02060e;
+    --abyss:  #04101f;
+    --deep:   #07203a;
+    --glow:   #57f5e8;
+    --glow-2: #7aa6ff;
+    --bloom:  #ffd17a;
+    --paper:  #cfe7f0;
+    --faint:  rgba(207, 231, 240, 0.42);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    background: var(--ink);
+    overflow: hidden;
+    cursor: none;
+  }
+
+  body {
+    font-family: "Spline Sans Mono", monospace;
+    color: var(--paper);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  canvas {
+    position: fixed;
+    inset: 0;
+    display: block;
+  }
+
+  /* ---- Vignette + grain over the canvas ---- */
+  .veil {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(130% 100% at 50% 0%, transparent 38%, rgba(2, 6, 14, 0.55) 100%);
+    mix-blend-mode: multiply;
+    z-index: 2;
+  }
+  .grain {
+    position: fixed;
+    inset: -150%;
+    pointer-events: none;
+    opacity: 0.05;
+    z-index: 3;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation: drift 7s steps(6) infinite;
+  }
+  @keyframes drift {
+    0%   { transform: translate(0, 0); }
+    100% { transform: translate(3%, -4%); }
+  }
+
+  /* ---- HUD ---- */
+  .hud {
+    position: fixed;
+    z-index: 5;
+    pointer-events: none;
+    color: var(--paper);
+    opacity: 0;
+    animation: fadein 2.4s ease 0.3s forwards;
+  }
+  @keyframes fadein { to { opacity: 1; } }
+
+  .masthead {
+    top: clamp(22px, 4vh, 48px);
+    left: clamp(22px, 4vw, 56px);
+  }
+  .masthead h1 {
+    font-family: "Fraunces", serif;
+    font-weight: 300;
+    font-size: clamp(40px, 9vw, 128px);
+    line-height: 0.82;
+    letter-spacing: -0.02em;
+    color: var(--paper);
+    text-shadow: 0 0 38px rgba(87, 245, 232, 0.22);
+  }
+  .masthead h1 em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--glow);
+  }
+  .masthead .sub {
+    margin-top: clamp(10px, 1.4vh, 18px);
+    font-size: 11px;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding-left: 0.2em;
+  }
+
+  .colophon {
+    bottom: clamp(20px, 3.6vh, 44px);
+    left: clamp(22px, 4vw, 56px);
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    line-height: 1.9;
+    text-transform: uppercase;
+    color: var(--faint);
+    max-width: 30ch;
+  }
+  .colophon b { color: var(--paper); font-weight: 500; }
+
+  .readout {
+    bottom: clamp(20px, 3.6vh, 44px);
+    right: clamp(22px, 4vw, 56px);
+    text-align: right;
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--faint);
+    line-height: 2;
+  }
+  .readout .v { color: var(--glow); font-weight: 500; letter-spacing: 0.1em; }
+
+  /* ---- Custom cursor: a small lantern ---- */
+  .lantern {
+    position: fixed;
+    z-index: 6;
+    top: 0; left: 0;
+    width: 40px; height: 40px;
+    margin: -20px 0 0 -20px;
+    border-radius: 50%;
+    pointer-events: none;
+    border: 1px solid rgba(87, 245, 232, 0.5);
+    box-shadow:
+      0 0 22px 4px rgba(87, 245, 232, 0.25),
+      inset 0 0 14px rgba(87, 245, 232, 0.2);
+    transition: width .25s cubic-bezier(.2,.8,.2,1),
+                height .25s cubic-bezier(.2,.8,.2,1),
+                margin .25s cubic-bezier(.2,.8,.2,1),
+                opacity .4s;
+  }
+  .lantern::after {
+    content: "";
+    position: absolute;
+    inset: 47%;
+    border-radius: 50%;
+    background: var(--glow);
+    box-shadow: 0 0 10px 2px var(--glow);
+  }
+  .lantern.press {
+    width: 70px; height: 70px; margin: -35px 0 0 -35px;
+    border-color: rgba(255, 209, 122, 0.7);
+    box-shadow: 0 0 40px 10px rgba(255, 209, 122, 0.3);
+  }
+
+  .hint {
+    position: fixed;
+    z-index: 5;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    font-size: 12px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--faint);
+    opacity: 0;
+    animation: pulse 4s ease 1.4s 2 forwards;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 0.85; }
+  }
+
+  /* ---- Photo mode: hide all chrome ---- */
+  body.bare .hud,
+  body.bare .lantern,
+  body.bare .hint { opacity: 0 !important; }
+  body.bare { cursor: none; }
+
+  /* brief flash when a frame is captured */
+  .flash {
+    position: fixed; inset: 0; z-index: 7; pointer-events: none;
+    background: #eaf6ff; opacity: 0;
+  }
+  .flash.go { animation: cap .5s ease-out; }
+  @keyframes cap { 0% { opacity: .65; } 100% { opacity: 0; } }
+
+  @media (max-width: 560px) {
+    .colophon { display: none; }
+    body { cursor: auto; }
+    .lantern { display: none; }
+  }
+</style>
+</head>
+<body>
+  <canvas id="sea"></canvas>
+
+  <div class="veil"></div>
+  <div class="grain"></div>
+
+  <header class="hud masthead">
+    <h1>Ti<em>de</em>s</h1>
+    <div class="sub">a bioluminescent swarm</div>
+  </header>
+
+  <div class="hud colophon">
+    Move to <b>part the water</b> · Tap for a <b>bloom</b> · Drag to <b>paint a current</b><br />
+    <b>Space</b> calm · <b>M</b> sound · <b>H</b> hide · <b>P</b> photo
+  </div>
+
+  <div class="hud readout">
+    <div><span class="v" id="rCount">0</span> souls adrift</div>
+    <div><span class="v" id="rDepth">—</span> fathoms</div>
+    <div><span class="v" id="rHour">midnight</span></div>
+    <div><span class="v" id="rEaten">0</span> taken by the dark</div>
+    <div><span class="v" id="rState">drifting</span></div>
+  </div>
+
+  <div class="hint">— stir the deep —</div>
+
+  <div class="lantern" id="lantern"></div>
+  <div class="flash" id="flash"></div>
+
+<script>
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("sea");
+  const ctx = canvas.getContext("2d", { alpha: false });
+  const lantern = document.getElementById("lantern");
+  const rCount = document.getElementById("rCount");
+  const rDepth = document.getElementById("rDepth");
+  const rHour = document.getElementById("rHour");
+  const rEaten = document.getElementById("rEaten");
+  const rState = document.getElementById("rState");
+  const flashEl = document.getElementById("flash");
+
+  // ---------- Audio (lazy: starts on first gesture) ----------
+  const Audio = {
+    ctx: null, master: null, on: true, started: false,
+    PENT: [0, 2, 4, 7, 9, 12, 14, 16],   // pentatonic, two octaves
+    init() {
+      if (this.started) return;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) { this.on = false; return; }
+      this.ctx = new AC();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = this.on ? 0.9 : 0.0001;
+      this.master.connect(this.ctx.destination);
+      this.startDrone();
+      this.started = true;
+    },
+    startDrone() {
+      const c = this.ctx;
+      const bus = c.createGain();
+      bus.gain.value = 0.16;
+      const lp = c.createBiquadFilter();
+      lp.type = "lowpass"; lp.frequency.value = 520; lp.Q.value = 0.6;
+      bus.connect(lp); lp.connect(this.master);
+      // two slightly detuned saw-ish drones, an octave apart
+      [55, 55.3, 110, 82.5].forEach((f, i) => {
+        const o = c.createOscillator();
+        o.type = i < 2 ? "sawtooth" : "sine";
+        o.frequency.value = f;
+        const g = c.createGain();
+        g.gain.value = i < 2 ? 0.5 : 0.28;
+        o.connect(g); g.connect(bus);
+        o.start();
+      });
+      // slow filter LFO for "breathing" water
+      const lfo = c.createOscillator();
+      lfo.frequency.value = 0.05;
+      const lfoG = c.createGain(); lfoG.gain.value = 240;
+      lfo.connect(lfoG); lfoG.connect(lp.frequency);
+      lfo.start();
+    },
+    chime(velocity) {
+      if (!this.ctx || !this.on) return;
+      const c = this.ctx, now = c.currentTime;
+      const deg = this.PENT[(Math.random() * this.PENT.length) | 0];
+      const freq = 261.63 * Math.pow(2, (deg + 12) / 12); // up an octave for sparkle
+      const o = c.createOscillator();
+      o.type = "triangle"; o.frequency.value = freq;
+      const o2 = c.createOscillator();
+      o2.type = "sine"; o2.frequency.value = freq * 2.01;
+      const g = c.createGain();
+      const peak = 0.18 * (0.5 + velocity * 0.5);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(peak, now + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 2.4);
+      const pan = c.createStereoPanner ? c.createStereoPanner() : null;
+      o.connect(g); o2.connect(g);
+      if (pan) { pan.pan.value = Math.random() * 1.6 - 0.8; g.connect(pan); pan.connect(this.master); }
+      else g.connect(this.master);
+      o.start(now); o2.start(now);
+      o.stop(now + 2.5); o2.stop(now + 2.5);
+    },
+    gulp() {
+      if (!this.ctx || !this.on) return;
+      const c = this.ctx, now = c.currentTime;
+      const o = c.createOscillator();
+      o.type = "sine";
+      o.frequency.setValueAtTime(150, now);
+      o.frequency.exponentialRampToValueAtTime(48, now + 0.18);
+      const lp = c.createBiquadFilter();
+      lp.type = "lowpass"; lp.frequency.value = 360;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.22, now + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+      o.connect(lp); lp.connect(g); g.connect(this.master);
+      o.start(now); o.stop(now + 0.36);
+    },
+    toggle() {
+      this.init();
+      this.on = !this.on;
+      if (this.ctx) {
+        if (this.ctx.state === "suspended") this.ctx.resume();
+        this.master.gain.setTargetAtTime(this.on ? 0.9 : 0.0001, this.ctx.currentTime, 0.2);
+      }
+      return this.on;
+    },
+  };
+
+  let W, H, DPR;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  resize();
+  window.addEventListener("resize", resize);
+
+  // ---------- Pointer ----------
+  const pointer = { x: W / 2, y: H / 2, px: W / 2, py: H / 2, active: false, speed: 0 };
+  function moveTo(x, y) {
+    pointer.x = x; pointer.y = y;
+    pointer.active = true;
+    lantern.style.left = x + "px";
+    lantern.style.top = y + "px";
+  }
+  const drag = { down: false, dist: 0, downX: 0, downY: 0 };
+  window.addEventListener("pointermove", (e) => {
+    if (drag.down) {
+      const dx = e.clientX - pointer.x, dy = e.clientY - pointer.y;
+      drag.dist += Math.hypot(dx, dy);
+      paintCurrent(e.clientX, e.clientY, dx, dy);
+    }
+    moveTo(e.clientX, e.clientY);
+  });
+  window.addEventListener("pointerdown", (e) => {
+    Audio.init();
+    if (Audio.ctx && Audio.ctx.state === "suspended") Audio.ctx.resume();
+    moveTo(e.clientX, e.clientY);
+    lantern.classList.add("press");
+    drag.down = true; drag.dist = 0; drag.downX = e.clientX; drag.downY = e.clientY;
+  });
+  window.addEventListener("pointerup", (e) => {
+    lantern.classList.remove("press");
+    if (drag.down && drag.dist < 8) bloom(drag.downX, drag.downY); // a tap, not a stroke
+    drag.down = false;
+  });
+  window.addEventListener("pointerleave", () => { pointer.active = false; drag.down = false; });
+
+  let calm = false;
+  function capture() {
+    const url = canvas.toDataURL("image/png");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "tides-" + Math.round(performance.now()) + ".png";
+    a.click();
+    flashEl.classList.remove("go");
+    void flashEl.offsetWidth;       // restart animation
+    flashEl.classList.add("go");
+  }
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Space") { e.preventDefault(); calm = !calm; }
+    else if (e.key === "m" || e.key === "M") { Audio.toggle(); }
+    else if (e.key === "h" || e.key === "H") { document.body.classList.toggle("bare"); }
+    else if (e.key === "p" || e.key === "P") { capture(); }
+  });
+
+  // ---------- Palette ----------
+  const HUES = [
+    [87, 245, 232],   // teal
+    [122, 166, 255],  // periwinkle
+    [120, 255, 200],  // sea-green
+    [180, 140, 255],  // violet
+  ];
+
+  // ---------- Boids ----------
+  const COUNT = Math.round(Math.min(260, Math.max(110, (W * H) / 7200)));
+  const PERCEPT = 64;
+  const PERCEPT2 = PERCEPT * PERCEPT;
+  const SEP_R = 24;
+  const SEP_R2 = SEP_R * SEP_R;
+  const MAX_SPEED = 2.5;
+  const MAX_FORCE = 0.05;
+
+  class Boid {
+    constructor() {
+      this.x = Math.random() * W;
+      this.y = Math.random() * H;
+      const a = Math.random() * Math.PI * 2;
+      const s = 0.5 + Math.random() * MAX_SPEED;
+      this.vx = Math.cos(a) * s;
+      this.vy = Math.sin(a) * s;
+      this.ax = 0; this.ay = 0;
+      this.hue = HUES[(Math.random() * HUES.length) | 0];
+      this.size = 1.3 + Math.random() * 2.1;
+      this.lum = 0.4 + Math.random() * 0.6;   // base luminosity
+      this.flash = 0;                          // transient brightness
+      this.phase = Math.random() * Math.PI * 2;
+      this.tx = this.x; this.ty = this.y;      // tail point (for trail)
+    }
+  }
+
+  let boids = [];
+  for (let i = 0; i < COUNT; i++) boids.push(new Boid());
+
+  // ---------- Spatial hash grid ----------
+  const CELL = PERCEPT;
+  let cols, rows, grid;
+  function rebuildGrid() {
+    cols = Math.ceil(W / CELL) + 1;
+    rows = Math.ceil(H / CELL) + 1;
+    grid = new Array(cols * rows);
+    for (let i = 0; i < grid.length; i++) grid[i] = [];
+  }
+  rebuildGrid();
+  window.addEventListener("resize", rebuildGrid);
+
+  // ---------- Flow field (paintable current) ----------
+  const FCELL = 56;
+  let fcols, frows, flowX, flowY;
+  function rebuildFlow() {
+    fcols = Math.ceil(W / FCELL) + 1;
+    frows = Math.ceil(H / FCELL) + 1;
+    flowX = new Float32Array(fcols * frows);
+    flowY = new Float32Array(fcols * frows);
+  }
+  rebuildFlow();
+  window.addEventListener("resize", rebuildFlow);
+
+  function paintCurrent(x, y, vx, vy) {
+    const cx = (x / FCELL) | 0, cy = (y / FCELL) | 0;
+    const force = Math.min(6, Math.hypot(vx, vy)) * 0.08;
+    if (force < 0.001) return;
+    const nx = vx, ny = vy, nl = Math.hypot(nx, ny) || 1;
+    for (let oy = -1; oy <= 1; oy++) {
+      for (let ox = -1; ox <= 1; ox++) {
+        const gx = cx + ox, gy = cy + oy;
+        if (gx < 0 || gy < 0 || gx >= fcols || gy >= frows) continue;
+        const idx = gy * fcols + gx;
+        const fall = (ox === 0 && oy === 0) ? 1 : 0.5;
+        flowX[idx] += (nx / nl) * force * fall;
+        flowY[idx] += (ny / nl) * force * fall;
+      }
+    }
+  }
+
+  function cellIndex(x, y) {
+    let cx = (x / CELL) | 0;
+    let cy = (y / CELL) | 0;
+    if (cx < 0) cx = 0; else if (cx >= cols) cx = cols - 1;
+    if (cy < 0) cy = 0; else if (cy >= rows) cy = rows - 1;
+    return cy * cols + cx;
+  }
+
+  // ---------- Blooms (click bursts of light) ----------
+  const blooms = [];
+  function bloom(x, y) {
+    blooms.push({ x, y, r: 0, max: 240 + Math.random() * 120, life: 1 });
+    let nearest = 1e9;
+    // flash & nudge nearby boids outward, then they get curious and return
+    for (const b of boids) {
+      const dx = b.x - x, dy = b.y - y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < nearest) nearest = d2;
+      if (d2 < 260 * 260) {
+        b.flash = Math.min(1.8, b.flash + 1.4 * (1 - Math.sqrt(d2) / 260));
+      }
+    }
+    // louder chime when the bloom lands among the swarm
+    const velocity = Math.max(0.25, 1 - Math.sqrt(nearest) / 300);
+    Audio.chime(velocity);
+  }
+
+  // ---------- Predators: slow hunters the swarm flees ----------
+  const PRED_COUNT = Math.max(1, Math.round(W / 900));
+  let eaten = 0;
+  const predators = [];
+  for (let i = 0; i < PRED_COUNT; i++) {
+    predators.push({
+      x: Math.random() * W, y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 1.2, vy: (Math.random() - 0.5) * 1.2,
+      phase: Math.random() * Math.PI * 2,
+      r: 16 + Math.random() * 10,
+      fed: 0,
+    });
+  }
+
+  // a creature taken by the dark drifts back in from the edge, reborn
+  function respawnFromEdge(b) {
+    const side = (Math.random() * 4) | 0;
+    if (side === 0) { b.x = -20; b.y = Math.random() * H; }
+    else if (side === 1) { b.x = W + 20; b.y = Math.random() * H; }
+    else if (side === 2) { b.y = -20; b.x = Math.random() * W; }
+    else { b.y = H + 20; b.x = Math.random() * W; }
+    const a = Math.random() * Math.PI * 2, s = 1 + Math.random() * MAX_SPEED;
+    b.vx = Math.cos(a) * s; b.vy = Math.sin(a) * s;
+    b.tx = b.x; b.ty = b.y;
+    b.flash = 1.6;
+  }
+
+  // ---------- Simulation ----------
+  function limit(vx, vy, max) {
+    const m2 = vx * vx + vy * vy;
+    if (m2 > max * max) {
+      const m = Math.sqrt(m2);
+      return [vx / m * max, vy / m * max];
+    }
+    return [vx, vy];
+  }
+
+  function step() {
+    // pointer speed
+    const pdx = pointer.x - pointer.px;
+    const pdy = pointer.y - pointer.py;
+    pointer.speed = Math.hypot(pdx, pdy);
+    pointer.px = pointer.x;
+    pointer.py = pointer.y;
+
+    // the current settles back to stillness
+    for (let i = 0; i < flowX.length; i++) { flowX[i] *= 0.94; flowY[i] *= 0.94; }
+
+    // rebuild hash
+    for (let i = 0; i < grid.length; i++) grid[i].length = 0;
+    for (const b of boids) grid[cellIndex(b.x, b.y)].push(b);
+
+    const speedScale = calm ? 0.45 : 1;
+    let sumX = 0, sumY = 0;
+
+    for (const b of boids) {
+      let alignX = 0, alignY = 0;
+      let cohX = 0, cohY = 0;
+      let sepX = 0, sepY = 0;
+      let n = 0, wsum = 0;
+
+      const cx = (b.x / CELL) | 0;
+      const cy = (b.y / CELL) | 0;
+
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          const gx = cx + ox, gy = cy + oy;
+          if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) continue;
+          const bucket = grid[gy * cols + gx];
+          for (const o of bucket) {
+            if (o === b) continue;
+            const dx = o.x - b.x, dy = o.y - b.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 > PERCEPT2 || d2 === 0) continue;
+            // kinship: school tightly with your own hue, loosely with strangers
+            const w = (o.hue === b.hue) ? 1.7 : 0.35;
+            alignX += o.vx * w; alignY += o.vy * w;
+            cohX += o.x * w; cohY += o.y * w;
+            wsum += w;
+            if (d2 < SEP_R2) {
+              const d = Math.sqrt(d2);
+              sepX -= dx / d; sepY -= dy / d;
+            }
+            n++;
+          }
+        }
+      }
+
+      if (n > 0) {
+        // alignment
+        let [ax, ay] = limit(alignX / wsum, alignY / wsum, MAX_SPEED);
+        ax = (ax - b.vx); ay = (ay - b.vy);
+        [ax, ay] = limit(ax, ay, MAX_FORCE);
+        // cohesion
+        let cdx = cohX / wsum - b.x, cdy = cohY / wsum - b.y;
+        [cdx, cdy] = limit(cdx, cdy, MAX_SPEED);
+        cdx -= b.vx; cdy -= b.vy;
+        [cdx, cdy] = limit(cdx, cdy, MAX_FORCE);
+        // separation
+        let [sx, sy] = limit(sepX, sepY, MAX_SPEED);
+        sx -= b.vx; sy -= b.vy;
+        [sx, sy] = limit(sx, sy, MAX_FORCE);
+
+        b.ax += ax * 1.0 + cdx * 0.9 + sx * 1.5;
+        b.ay += ay * 1.0 + cdy * 0.9 + sy * 1.5;
+      }
+
+      // pointer interaction: gentle flee, stronger when pointer moves fast
+      if (pointer.active) {
+        const dx = b.x - pointer.x, dy = b.y - pointer.y;
+        const d2 = dx * dx + dy * dy;
+        const R = 150;
+        if (d2 < R * R && d2 > 0.01) {
+          const d = Math.sqrt(d2);
+          const force = (1 - d / R);
+          const push = force * (0.6 + Math.min(pointer.speed, 40) * 0.04);
+          b.ax += (dx / d) * push;
+          b.ay += (dy / d) * push;
+          b.flash = Math.min(1.6, b.flash + force * 0.12);
+        }
+      }
+
+      // predators: bolt when one gets close (but only close — stragglers get caught)
+      for (const p of predators) {
+        const dx = b.x - p.x, dy = b.y - p.y;
+        const d2 = dx * dx + dy * dy;
+        const R = 80;
+        if (d2 < R * R && d2 > 0.01) {
+          const d = Math.sqrt(d2);
+          const force = (1 - d / R);
+          b.ax += (dx / d) * force * 0.7;
+          b.ay += (dy / d) * force * 0.7;
+          b.flash = Math.min(1.8, b.flash + force * 0.25);
+        }
+      }
+
+      // bloom attraction (curiosity toward the light)
+      for (const bl of blooms) {
+        const dx = bl.x - b.x, dy = bl.y - b.y;
+        const d2 = dx * dx + dy * dy;
+        const R = bl.r + 120;
+        if (d2 < R * R && d2 > 1) {
+          const d = Math.sqrt(d2);
+          const pull = bl.life * 0.05 * (1 - d / R);
+          b.ax += (dx / d) * pull;
+          b.ay += (dy / d) * pull;
+        }
+      }
+
+      // wander
+      b.phase += 0.03;
+      b.ax += Math.cos(b.phase) * 0.012;
+      b.ay += Math.sin(b.phase * 1.3) * 0.012;
+
+      // ride the painted current
+      {
+        const fx = (b.x / FCELL) | 0, fy = (b.y / FCELL) | 0;
+        if (fx >= 0 && fy >= 0 && fx < fcols && fy < frows) {
+          const fi = fy * fcols + fx;
+          b.ax += flowX[fi] * 0.5;
+          b.ay += flowY[fi] * 0.5;
+        }
+      }
+
+      // integrate
+      b.vx += b.ax; b.vy += b.ay;
+      [b.vx, b.vy] = limit(b.vx, b.vy, MAX_SPEED * (calm ? 0.6 : 1));
+      b.ax = 0; b.ay = 0;
+
+      // store tail before moving
+      b.tx = b.x; b.ty = b.y;
+      b.x += b.vx * speedScale;
+      b.y += b.vy * speedScale;
+
+      // wrap with margin
+      const m = 30;
+      if (b.x < -m) { b.x = W + m; b.tx = b.x; }
+      else if (b.x > W + m) { b.x = -m; b.tx = b.x; }
+      if (b.y < -m) { b.y = H + m; b.ty = b.y; }
+      else if (b.y > H + m) { b.y = -m; b.ty = b.y; }
+
+      b.flash *= 0.92;
+      sumX += b.x; sumY += b.y;
+    }
+
+    // ---- predators stalk the swarm, then lunge ----
+    const cenX = sumX / boids.length, cenY = sumY / boids.length;
+    const STRIKE = 120, STRIKE2 = STRIKE * STRIKE;
+    for (const p of predators) {
+      p.phase += 0.02;
+
+      // one scan of the neighbourhood: eat what's in the jaws, mark the nearest soul
+      const eatR2 = (p.r * 1.3) * (p.r * 1.3);
+      const pcx = (p.x / CELL) | 0, pcy = (p.y / CELL) | 0;
+      let nearB = null, nearD2 = 1e9;
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          const gx = pcx + ox, gy = pcy + oy;
+          if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) continue;
+          const bucket = grid[gy * cols + gx];
+          for (const b of bucket) {
+            const dx = b.x - p.x, dy = b.y - p.y, d2 = dx * dx + dy * dy;
+            if (d2 < eatR2) {
+              respawnFromEdge(b);
+              eaten++; p.fed = 1;
+              p.r = Math.min(34, p.r + 0.25);   // it grows, slowly
+              Audio.gulp();
+              continue;
+            }
+            if (d2 < nearD2) { nearD2 = d2; nearB = b; }
+          }
+        }
+      }
+
+      const lunging = nearB && nearD2 < STRIKE2;
+      if (lunging) {
+        // strike: faster than the swarm can flee, briefly
+        const d = Math.sqrt(nearD2) || 1;
+        p.vx += ((nearB.x - p.x) / d) * 0.22;
+        p.vy += ((nearB.y - p.y) / d) * 0.22;
+      } else {
+        // drift toward the crowd, lazily, with a wandering bias
+        const dx = cenX - p.x, dy = cenY - p.y, dl = Math.hypot(dx, dy) || 1;
+        p.vx += (dx / dl) * 0.012 + Math.cos(p.phase) * 0.02;
+        p.vy += (dy / dl) * 0.012 + Math.sin(p.phase * 1.2) * 0.02;
+      }
+
+      const pmax = (lunging ? 3.1 : 1.5) * (calm ? 0.6 : 1);
+      const ps = Math.hypot(p.vx, p.vy);
+      if (ps > pmax) { p.vx = p.vx / ps * pmax; p.vy = p.vy / ps * pmax; }
+      p.x += p.vx; p.y += p.vy;
+
+      // soft bounce off edges
+      const pad = 40;
+      if (p.x < pad) p.vx += 0.06; else if (p.x > W - pad) p.vx -= 0.06;
+      if (p.y < pad) p.vy += 0.06; else if (p.y > H - pad) p.vy -= 0.06;
+
+      p.fed *= 0.9;
+    }
+
+    // advance blooms
+    for (let i = blooms.length - 1; i >= 0; i--) {
+      const bl = blooms[i];
+      bl.r += (bl.max - bl.r) * 0.06;
+      bl.life *= 0.965;
+      if (bl.life < 0.02) blooms.splice(i, 1);
+    }
+  }
+
+  // ---------- Render ----------
+  let t = 0;
+  let phaseOfDay = 0;   // 0..1 around the clock
+
+  // three moods of the deep, lerped through the cycle
+  const MOODS = [
+    { mid: [5, 16, 30],  caustic: [80, 160, 200] },   // midnight — cold blue
+    { mid: [7, 22, 26],  caustic: [90, 200, 170] },   // dawn — sea-green
+    { mid: [14, 12, 32], caustic: [150, 120, 220] },  // dusk — violet
+  ];
+  function lerp(a, b, k) { return a + (b - a) * k; }
+  function moodAt(p) {
+    const seg = p * 3;            // 0..3
+    const i = Math.floor(seg) % 3;
+    const j = (i + 1) % 3;
+    const k = seg - Math.floor(seg);
+    const A = MOODS[i], B = MOODS[j];
+    return {
+      mid: [0,1,2].map(n => lerp(A.mid[n], B.mid[n], k)),
+      caustic: [0,1,2].map(n => lerp(A.caustic[n], B.caustic[n], k)),
+    };
+  }
+
+  function background() {
+    t += 0.0016;
+    phaseOfDay = (t * 0.012) % 1;        // full day ~ 5–6 min
+    const breathe = (Math.sin(t) * 0.5 + 0.5);
+    const m = moodAt(phaseOfDay);
+    const [mr, mg, mb] = m.mid;
+    const [cr, cg, cb] = m.caustic;
+
+    const g = ctx.createLinearGradient(0, 0, W * 0.3, H);
+    g.addColorStop(0, "#02060e");
+    g.addColorStop(0.55, `rgb(${(mr + breathe * 3) | 0}, ${(mg + breathe * 6) | 0}, ${(mb + breathe * 10) | 0})`);
+    g.addColorStop(1, "#02080f");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // faint caustic light columns from above, tinted by the hour
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 3; i++) {
+      const x = W * (0.2 + 0.3 * i) + Math.sin(t * 1.3 + i * 2) * 90;
+      const rg = ctx.createRadialGradient(x, -120, 0, x, -120, H * 1.1);
+      rg.addColorStop(0, `rgba(${cr | 0}, ${cg | 0}, ${cb | 0}, 0.06)`);
+      rg.addColorStop(1, `rgba(${cr | 0}, ${cg | 0}, ${cb | 0}, 0)`);
+      ctx.fillStyle = rg;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.restore();
+  }
+
+  const HOURS = ["midnight", "the small hours", "first light", "dawn", "high water", "noon current", "afternoon", "dusk", "nightfall"];
+  function hourName() {
+    return HOURS[Math.min(HOURS.length - 1, (phaseOfDay * HOURS.length) | 0)];
+  }
+
+  function drawPredators() {
+    ctx.globalCompositeOperation = "source-over";
+    for (const p of predators) {
+      const wob = 1 + Math.sin(p.phase * 2) * 0.08;
+      const R = p.r * 4.2 * wob;
+      // a void that dims the water and creatures around it
+      const vg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, R);
+      vg.addColorStop(0, "rgba(2, 3, 8, 0.92)");
+      vg.addColorStop(0.5, "rgba(2, 4, 10, 0.55)");
+      vg.addColorStop(1, "rgba(2, 4, 10, 0)");
+      ctx.fillStyle = vg;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, R, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // ominous rim, drawn additively
+    ctx.globalCompositeOperation = "lighter";
+    for (const p of predators) {
+      const rim = ctx.createRadialGradient(p.x, p.y, p.r * 0.6, p.x, p.y, p.r * 1.9);
+      const ra = 0.22 + (p.fed || 0) * 0.6;
+      rim.addColorStop(0, "rgba(120, 40, 90, 0)");
+      rim.addColorStop(0.8, `rgba(${150 + (p.fed || 0) * 80 | 0}, 50, 110, ${ra})`);
+      rim.addColorStop(1, "rgba(120, 40, 90, 0)");
+      ctx.fillStyle = rim;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 1.7, 0, Math.PI * 2);
+      ctx.fill();
+      // two cold eyes
+      const ang = Math.atan2(p.vy, p.vx);
+      for (const s of [-0.4, 0.4]) {
+        const ex = p.x + Math.cos(ang + s) * p.r * 0.5;
+        const ey = p.y + Math.sin(ang + s) * p.r * 0.5;
+        ctx.fillStyle = "rgba(255, 120, 90, 0.85)";
+        ctx.beginPath();
+        ctx.arc(ex, ey, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  function render() {
+    background();
+
+    ctx.globalCompositeOperation = "lighter";
+
+    // blooms
+    for (const bl of blooms) {
+      const rg = ctx.createRadialGradient(bl.x, bl.y, 0, bl.x, bl.y, bl.r);
+      const a = bl.life;
+      rg.addColorStop(0, `rgba(255, 226, 170, ${0.5 * a})`);
+      rg.addColorStop(0.25, `rgba(255, 200, 120, ${0.22 * a})`);
+      rg.addColorStop(0.6, `rgba(120, 200, 255, ${0.08 * a})`);
+      rg.addColorStop(1, "rgba(120, 200, 255, 0)");
+      ctx.fillStyle = rg;
+      ctx.beginPath();
+      ctx.arc(bl.x, bl.y, bl.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // boids: trail + glow + core
+    for (const b of boids) {
+      const [r, g, bb] = b.hue;
+      const pulse = 0.75 + 0.25 * Math.sin(b.phase * 2);
+      const bright = Math.min(1.9, (b.lum * pulse) + b.flash);
+
+      // trail (motion streak)
+      ctx.strokeStyle = `rgba(${r}, ${g}, ${bb}, ${0.10 * bright})`;
+      ctx.lineWidth = b.size * 0.9;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(b.tx, b.ty);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+
+      // outer glow
+      const gr = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.size * 6 * bright);
+      gr.addColorStop(0, `rgba(${r}, ${g}, ${bb}, ${0.5 * bright})`);
+      gr.addColorStop(0.4, `rgba(${r}, ${g}, ${bb}, ${0.14 * bright})`);
+      gr.addColorStop(1, `rgba(${r}, ${g}, ${bb}, 0)`);
+      ctx.fillStyle = gr;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.size * 6 * bright, 0, Math.PI * 2);
+      ctx.fill();
+
+      // bright core
+      ctx.fillStyle = `rgba(${Math.min(255, r + 120)}, ${Math.min(255, g + 60)}, ${Math.min(255, bb + 40)}, ${0.9 * Math.min(1, bright)})`;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.size * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    drawPredators();
+
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  // ---------- HUD readout ----------
+  let frame = 0;
+  function updateHud() {
+    if (frame % 18 === 0) {
+      rCount.textContent = boids.length;
+      // pseudo-depth from pointer height
+      const depth = Math.round(200 + (pointer.y / H) * 1800);
+      rDepth.textContent = depth.toLocaleString();
+      rHour.textContent = hourName();
+      rEaten.textContent = eaten;
+      rState.textContent = calm ? "becalmed" : (pointer.speed > 6 ? "scattering" : "drifting");
+    }
+  }
+
+  // ---------- Loop ----------
+  function loop() {
+    step();
+    render();
+    updateHud();
+    frame++;
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+</script>
+</body>
+</html>
